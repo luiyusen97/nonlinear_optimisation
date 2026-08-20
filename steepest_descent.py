@@ -4,34 +4,11 @@
 import numpy as np
 from tqdm import tqdm
 import line_search
-import approximate_derivative
+import approximate_derivatives
+import evaluation_functions
 
 # functions ===============
-def evaluate_progress_convex(f_k, f_k_1, x_k, x_k_1):
-    """
-    Convex sufficiently smooth objective implies zero gradient at optimal point 
-    If the step size is small enough, this is effectively just approximate gradient
-    Args:
-        f_k (float): current function evaluation
-        f_k_1 (float): previous function evaluation
-        x_k (numpy array): current point
-        x_k_1 (numpy array): previous point
-    Returns:
-        difference (float): how close the optimiser is to the optimal point
-    """
-    assert x_k.shape == x_k_1.shape, f"x_k dimension {x_k.shape} != x_k_1 dimension {x_k_1.shape}"
-    
-    function_value_difference = np.linalg.norm(
-    	f_k - f_k, ord=2
-    )
-    point_difference = np.linalg.norm(
-    	x_k - x_k_1, ord=2
-    )
-    
-    difference = abs(function_value_difference / point_difference)
-    return difference
-	
-def steepest_descent(x_0, f_x, eps, max_iter, verbose):
+def steepest_descent(x_0, f_x, eps=1e-8, max_iter=1000000, verbose=False):
     """
     Implements steepest descent method for convex optimisation
     Args:
@@ -65,9 +42,10 @@ def steepest_descent(x_0, f_x, eps, max_iter, verbose):
     x_k = x_0.copy()
     progress_bar = tqdm(range(max_iter)) if verbose else range(max_iter)
     for iter in progress_bar:
-        p_k = approximate_derivative.approximate_gradient(f_x=f_x, x=x_k)
+        p_k = -approximate_derivatives.approximate_gradient(f_x=f_x, x=x_k)
+
         alpha_k, backtracking_converged = line_search.line_search(
-        	x_k=x_k, p_k=p_k, f_x=f_x
+        	x_k=x_k, p_k=p_k, f_x=f_x, verbose=False
         )
         assert backtracking_converged, "Step length optimisation failed"
         proposed_step = alpha_k * p_k
@@ -75,14 +53,15 @@ def steepest_descent(x_0, f_x, eps, max_iter, verbose):
         steps_taken.append(x_k)
         function_evaluations.append(f_x(x_k))
         
-        difference_with_optimal_point = evaluate_progress_convex(
-        	f_k=function_evaluations[-1], 
-        	f_k_1=function_evaluations[-2], 
-        	x_k=steps_taken[-1],
-        	x_k_1=steps_taken[-2]
-        )
+        # difference_with_optimal_point = evaluation_functions.evaluate_progress_convex(
+        # 	f_k=function_evaluations[-1], 
+        # 	f_k_1=function_evaluations[-2], 
+        # 	x_k=steps_taken[-1],
+        # 	x_k_1=steps_taken[-2]
+        # )
+        difference_with_optimal_point = np.linalg.norm(approximate_derivatives.approximate_gradient(f_x=f_x, x=x_k), 2)
         if verbose:
-            progress_bar.set_description(f"Improvement: {np.round(difference_with_optimal_point, 1)}")
+            progress_bar.set_description(f"Improvement: {difference_with_optimal_point:.1g}")
         
         differences.append(difference_with_optimal_point)
         if np.abs(difference_with_optimal_point) < eps:
@@ -90,4 +69,4 @@ def steepest_descent(x_0, f_x, eps, max_iter, verbose):
                 print("Optimiser complete")
             break
             
-    return alpha_k, function_evaluations, steps_taken, differences
+    return x_k, function_evaluations, steps_taken, differences
